@@ -1,0 +1,3 @@
+SocksPort {{.socksport}}
+ControlPort {{.controlport}}
+DataDirectory {{.data_dir}}
