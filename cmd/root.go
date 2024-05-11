@@ -47,7 +47,7 @@ var flags tgetFlags
 var rootCmd = &cobra.Command{
 	Use:   "tget [flags] <url|file> [...url|file]",
 	Short: "A (fast) Tor file downloader",
-	Long:  `A file downloader which uses multiple tor instances to try to use all available bandwidth`,
+	Long:  `A file downloader which uses multiple Tor instances to try to use all available bandwidth`,
 	Run: func(cmd *cobra.Command, args []string) {
 		//Setup logger
 		if flags.logPath != "" {
