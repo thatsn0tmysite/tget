@@ -4,6 +4,7 @@ Copyright © 2024 NAME HERE <EMAIL ADDRESS>
 package cmd
 
 import (
+	"crypto/tls"
 	_ "embed"
 	"errors"
 	"fmt"
@@ -152,7 +153,12 @@ var rootCmd = &cobra.Command{
 				log.Fatalf("failed to obtain proxy dialer: %v\n", err)
 				continue
 			}
-			tbTransport := &http.Transport{Dial: tbDialer.Dial}
+			tbTransport := &http.Transport{
+				Dial: tbDialer.Dial,
+				TLSClientConfig: &tls.Config{
+					InsecureSkipVerify: flags.unsafeTLS,
+				},
+			}
 			clients = append(clients, &http.Client{Transport: tbTransport})
 		}
 		log.Printf("created %d http Tor clients using %d Tor instances\n", len(clients), flags.instances)
