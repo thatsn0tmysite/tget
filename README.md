@@ -23,6 +23,7 @@ This tool makes use of the handy bine library...
 - [ ] Fancy progress bars
 - [ ] Better logging
 - [ ] Onion themed logo
+- [ ] Refactor code out of `cmd/root.go`
 - [ ] Tests
 
 
