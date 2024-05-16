@@ -1,3 +1,5 @@
+![torget logo](.images/logo.png "torget by thatsn0tmysite")
+
 #Torget (tget)
 
 Torget, or `tget` for short, is a http file downloader for Tor.
@@ -16,13 +18,13 @@ TODO: insert fancy gif here
 This tool makes use of the handy bine library...
 
 ## Features / TODO
-- [ ] Basic functionality (multiple tor instances spawning)
-- [ ] Download from URLs or files
-- [ ] Allow download resume
-- [ ] Custom headers/cookies
-- [ ] Fancy progress bars
+- [x] Basic functionality (multiple tor instances spawning)
+- [x] Download from URLs or files
+- [x] Allow download resume
+- [x] Custom headers/cookies
+- [x] Fancy progress bars
 - [ ] Better logging
-- [ ] Onion themed logo
+- [x] Onion themed logo
 - [ ] Refactor code out of `cmd/root.go`
 - [ ] Tests
 
