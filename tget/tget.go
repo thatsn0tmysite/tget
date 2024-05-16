@@ -14,7 +14,7 @@ func GetFilename(file string, attempt int) string {
 	if _, err := os.Stat(file); err == os.ErrNotExist {
 		return file // valid filename, return
 	} else if err == nil {
-		return GetFilename(fmt.Sprintf("%s.%d", file, attempt), attempt+1)
+		return GetFilename(fmt.Sprintf("%s.%d", file, attempt+1), attempt+1)
 	}
 
 	return file
