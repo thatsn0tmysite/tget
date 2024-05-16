@@ -4,6 +4,7 @@ Copyright © 2024 NAME HERE <EMAIL ADDRESS>
 package cmd
 
 import (
+	"context"
 	"crypto/tls"
 	_ "embed"
 	"errors"
@@ -14,12 +15,20 @@ import (
 	"net/url"
 	"os"
 	"path"
+	"strconv"
 	"strings"
+	"sync"
 	"text/template"
+	"time"
 	"torget/tget"
 
+	"github.com/cretz/bine/tor"
+	"github.com/google/uuid"
 	"github.com/hairyhenderson/go-which"
+	"github.com/panjf2000/ants"
 	"github.com/spf13/cobra"
+	"github.com/vbauerster/mpb/v8"
+	"github.com/vbauerster/mpb/v8/decor"
 	"golang.org/x/net/proxy"
 )
 
@@ -35,6 +44,11 @@ type tgetFlags struct {
 	logPath      string
 	outPath      string
 	host         string
+	verbose      bool
+	maxWait      int
+	ovewrite     bool
+	tryContinue  bool
+	testDomain   string
 
 	method    string
 	cookies   []string
@@ -75,32 +89,23 @@ var rootCmd = &cobra.Command{
 		}
 
 		if len(flags.ports) < flags.instances {
-			// TODO: in case we need A LOT of instances, this is a sequential check, could be made concurrent
-			// TODO: ask OS for a free port, if TorHost is not localhost this is not always true, hence fail
-			log.Fatalf("not enough ports assigned: %v...\n", flags.ports)
-			return
-			/*for i := 0; i < (flags.instances - len(flags.ports)); i++ {
-				addr, err := net.ResolveTCPAddr("tcp", fmt.Sprintf("%s:0", flags.host))
-				if err != nil {
-					log.Fatalf("can't resolve: %v\n", flags.host)
-				}
-				if !addr.IP.Equal(net.ParseIP("127.0.0.1")) {
-					log.Fatalf("can't discover available ports on Tor host %s, not enough ports specified: %v\n", flags.host, flags.ports)
-				}
-				tmp, err := net.ListenTCP("tcp", addr)
-				if err != nil {
-					log.Fatalf("couldn't check port: %d\n", tmp.Addr().(*net.TCPAddr).Port)
-				}
-				defer tmp.Close()
+			missing := (flags.instances - len(flags.ports))
 
-				// this port was just available, mark as usable (techinically someone could steal it meanwhile, we could reserve it...but meh)
-				port := (uint)(tmp.Addr().(*net.TCPAddr).Port)
+			log.Printf("not enough ports provided to fill instances assigned: %v, missing %v...\n", flags.ports, missing)
+			ports, errors := tget.GetFreePorts(missing)
+			if len(errors) > 0 {
+				for _, e := range errors {
+					log.Println(e)
+				}
+				log.Fatalln("failed to auto-discover free ports")
+			}
 
-				log.Printf("not enough ports assigned, using available random port: %d...\n", port)
-
-				flags.ports = append(flags.ports, port) // hopefully OS is smart enough to allocate a random available port for us
-			}*/
+			for _, port := range ports {
+				log.Printf("found free port for SockPort: %v...\n", port)
+				flags.ports = append(flags.ports, uint(port))
+			}
 		}
+		log.Printf("using ports: %v\n", flags.ports)
 
 		log.Printf("preparing %d instances of Tor...\n", flags.instances)
 		var torrc string
@@ -117,7 +122,8 @@ var rootCmd = &cobra.Command{
 			torrc = string(dat)
 		}
 
-		//var tors []*tor.Tor
+		var torswg sync.WaitGroup
+		var tors []*tor.Tor
 		var clients []*http.Client
 		for i := 0; i < flags.instances; i++ {
 			//Create temp dir and torrc files
@@ -126,33 +132,41 @@ var rootCmd = &cobra.Command{
 				log.Fatal(err)
 			}
 			defer os.RemoveAll(dir)
-			file, err := os.Create(path.Join(dir, fmt.Sprintf("%d.torrc", flags.ports[i])))
+			file, err := os.Create(path.Join(dir, fmt.Sprintf("%d_%v.torrc", flags.ports[i], uuid.New().String())))
 			if err != nil {
 				log.Fatal(err)
 			}
 			log.Printf("creating temp torrc file at: %s\n", file.Name())
 
 			torConf := template.Must(template.New(file.Name()).Parse(torrc))
-			torConf.Execute(file, struct {
-				socksport   uint
-				controlport uint
-				data_dir    string
+			err = torConf.Execute(file, struct {
+				SocksPort   uint
+				ControlPort uint
+				DataDir     string
 			}{
-				socksport:   flags.ports[i],
-				controlport: flags.ports[i] + 1, // TODO: we should also do the check if available here
-				data_dir:    os.TempDir(),
+				SocksPort:   flags.ports[i],
+				ControlPort: flags.ports[i] + 1, // TODO: we should also do the check if available here
+				DataDir:     os.TempDir(),
 			})
+			if err != nil {
+				log.Fatalln(err)
+			}
+			file.Seek(0, 0) //reset to start of file
+			defer file.Close()
 
 			tbProxyURL, err := url.Parse(fmt.Sprintf("%s://%s:%d", flags.socksVersion, flags.host, flags.ports[i]))
 			if err != nil {
 				log.Fatalf("failed to parse proxy URL: %v\n", err)
 				continue
 			}
+
 			tbDialer, err := proxy.FromURL(tbProxyURL, proxy.Direct)
 			if err != nil {
 				log.Fatalf("failed to obtain proxy dialer: %v\n", err)
 				continue
 			}
+			log.Println(tbDialer)
+
 			tbTransport := &http.Transport{
 				Dial: tbDialer.Dial,
 				TLSClientConfig: &tls.Config{
@@ -160,8 +174,52 @@ var rootCmd = &cobra.Command{
 				},
 			}
 			clients = append(clients, &http.Client{Transport: tbTransport})
+
+			var dialCtx = context.Background()
+			var dialCancel context.CancelFunc
+			if flags.maxWait > 0 {
+				dialCtx, dialCancel = context.WithTimeout(context.Background(), time.Duration(flags.maxWait)*time.Second)
+				defer dialCancel()
+			}
+
+			torInstance, err := tor.Start(dialCtx, &tor.StartConf{
+				TorrcFile:         file.Name(),
+				NoAutoSocksPort:   true,
+				EnableNetwork:     true,
+				RetainTempDataDir: false,
+				NoHush:            flags.verbose,
+			})
+			if err != nil {
+				log.Fatalf("failed to start Tor instance: %v\n", err)
+				continue
+			}
+
+			tors = append(tors, torInstance)
+			defer torInstance.Close()
+			torswg.Add(1)
+			go func(id int, c *http.Client) {
+				defer torswg.Done()
+
+				for {
+					log.Printf("waiting for tor instance %v to start...\n", i)
+
+					_, err := c.Get(flags.testDomain)
+					if err != nil {
+						time.Sleep(3 * time.Second)
+						continue
+					}
+
+					log.Printf("instance %v ready!\n", i)
+					break
+				}
+
+			}(i, clients[i])
 		}
+
+		//Wait for all tor instances to be ready
+		torswg.Wait()
 		log.Printf("created %d http Tor clients using %d Tor instances\n", len(clients), flags.instances)
+		log.Println("Tor instances:", tors)
 
 		//Get list of URLs
 		urls := args
@@ -175,19 +233,115 @@ var rootCmd = &cobra.Command{
 				}
 				urls = strings.Split(string(data), "\n")
 			}
-
 		}
+
+		//Wait for tors to go online
 
 		log.Printf("total URLs: %d\n", len(urls))
-		chunks := tget.ChunkBy(urls, len(urls)/flags.instances)
-		for i, c := range chunks {
-			log.Printf("instance %d will download %v URLs\n", i, len(c))
-		}
+		chunks := tget.ChunkBy(urls, flags.instances)
+		log.Printf("chunks: %v\n", chunks)
 
-		//var wg sync.WaitGroup
-		//TODO: split in chunks, assign chunks to flags.concurrency goroutines
-		//		before starting download check if file with same name already exists
-		//		if so try resuming it
+		var wg sync.WaitGroup
+		p, _ := ants.NewPool(flags.concurrency)
+
+		bars := mpb.New(mpb.WithWaitGroup(&wg))
+		//Feed chunks to workers
+		for i := range flags.instances {
+			log.Printf("instance %d will download %v URLs\n", i, len(chunks[i]))
+
+			chunk := chunks[i]
+			p.Submit(func() {
+				//Worker
+				for _, url := range chunk {
+					wg.Add(1)
+					defer wg.Done()
+
+					go func(c *http.Client) {
+						req, _ := http.NewRequest(flags.method, url, nil)
+
+						baseFileName := path.Base(req.URL.Path)
+						if baseFileName == "." || baseFileName == "/" || baseFileName == "" {
+							baseFileName = fmt.Sprintf("%v_index.html", req.URL.Host)
+						}
+						if !flags.ovewrite {
+							baseFileName = tget.GetFilename(baseFileName, 0) // if path is / or "" we should save as index.html.<attempt>
+						}
+
+						outFilePath := path.Join(flags.outPath, baseFileName)
+						log.Printf("client %d downloading %v to %v\n", i, url, outFilePath)
+
+						currentSize := 0
+						if stat, err := os.Stat(outFilePath); err == nil {
+							// TODO: implement proper resume with etag/filehash/Ifrange etc, check if accpet-range is supported, etc
+							if flags.tryContinue && !flags.ovewrite {
+								currentSize := stat.Size()
+								log.Printf("%v found on disk, user asked to attempt a resume (%d)\n", outFilePath, currentSize)
+								req.Header.Set("range", fmt.Sprintf("%d-", currentSize))
+							}
+
+							//in case overwrite is set, start from the beginning anyway
+							if flags.ovewrite {
+								currentSize = 0
+								req.Header.Del("range")
+							}
+						}
+
+						out, err := os.OpenFile(outFilePath, os.O_APPEND|os.O_CREATE|os.O_RDWR, 0644)
+						if err != nil {
+							log.Println(err)
+							return
+						}
+						out.Seek(0, currentSize)
+
+						resp, err := c.Do(req)
+						if err != nil {
+							log.Println(err)
+							return
+						}
+						defer resp.Body.Close()
+
+						totalBytes, err := strconv.Atoi(resp.Header.Get("content-length"))
+						if err != nil {
+							log.Println(err)
+							return
+						}
+
+						bar := bars.AddBar(
+							int64(totalBytes),
+							mpb.PrependDecorators(
+								// simple name decorator
+								decor.Name(baseFileName),
+								// decor.DSyncWidth bit enables column width synchronization
+								decor.Percentage(decor.WCSyncSpace),
+							),
+						)
+
+						for {
+							var buf []byte
+
+							_, err := resp.Body.Read(buf)
+							if err != nil {
+								log.Println(err)
+								break
+							}
+							if err == io.EOF {
+								break
+							}
+
+							written, err := out.Write(buf)
+							if err != nil {
+								log.Println(err)
+								break
+							}
+
+							bar.IncrInt64(int64(written))
+						}
+
+					}(clients[i])
+				}
+
+			})
+		}
 
 	},
 }
@@ -215,8 +369,12 @@ func init() {
 	rootCmd.Flags().StringVarP(&flags.torPath, "tor-path", "t", torPath, "path to Tor binary")
 	rootCmd.Flags().StringVarP(&flags.logPath, "log-path", "l", "", "path to save logs at")
 	rootCmd.Flags().StringVarP(&flags.socksVersion, "socks-version", "S", "socks5", "socks version to use")
+	rootCmd.Flags().StringVar(&flags.testDomain, "test-domain", "https://thatsn0tmy.site", "website to use while testing if Tor is up")
 	rootCmd.Flags().StringVarP(&flags.outPath, "out-path", "o", ".", "path to save downloaded files in")
-	//TODO: verbosity
+	rootCmd.Flags().BoolVarP(&flags.verbose, "verbose", "v", false, "be (very) verbose")
+	rootCmd.Flags().BoolVarP(&flags.ovewrite, "ovewrite", "O", false, "overwrite file(s) if they already exist")
+	rootCmd.Flags().BoolVar(&flags.tryContinue, "continue", false, "attempt to continue a previously interrupted download")
+	rootCmd.Flags().IntVarP(&flags.maxWait, "timeout", "T", 0, "max time to wait for Tor before canceling (0: no timeout)")
 
 	// Headers, cookies, ssl, etc
 	rootCmd.Flags().BoolVarP(&flags.unsafeTLS, "unsafe-tls", "k", false, "skip TLS certificates validation")
