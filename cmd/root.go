@@ -50,8 +50,9 @@ type tgetFlags struct {
 	tryContinue  bool
 	testDomain   string
 
+	body      string
 	method    string
-	cookies   []string
+	cookies   string
 	headers   []string
 	unsafeTLS bool
 }
@@ -259,6 +260,26 @@ var rootCmd = &cobra.Command{
 					go func(c *http.Client) {
 						req, _ := http.NewRequest(flags.method, url, nil)
 
+						//populate headers, cookies, etc
+						for _, h := range flags.headers {
+							split := strings.Split(h, "=")
+							k := split[0]
+							v := ""
+							if len(split) > 1 {
+								v = strings.Join(split[1:], "=")
+							}
+
+							req.Header.Add(k, v)
+						}
+
+						if flags.cookies != "" {
+							req.Header.Add("Cookie", flags.cookies)
+						}
+
+						if len(flags.body) > 0 {
+							req.Body = io.NopCloser(strings.NewReader(flags.body))
+						}
+
 						baseFileName := path.Base(req.URL.Path)
 						if baseFileName == "." || baseFileName == "/" || baseFileName == "" {
 							baseFileName = fmt.Sprintf("%v_index.html", req.URL.Host)
@@ -379,7 +400,9 @@ func init() {
 	// Headers, cookies, ssl, etc
 	rootCmd.Flags().BoolVarP(&flags.unsafeTLS, "unsafe-tls", "k", false, "skip TLS certificates validation")
 	rootCmd.Flags().StringSliceVarP(&flags.headers, "header", "H", []string{}, "header(s) to include in all requests")
-	rootCmd.Flags().StringSliceVarP(&flags.cookies, "cookie", "C", []string{}, "cookie(s) to include in all requests")
+	rootCmd.Flags().StringVarP(&flags.cookies, "cookies", "C", "", "cookie(s) to include in all requests")
+	rootCmd.Flags().StringVarP(&flags.body, "data", "d", "", "body of request to send")
+
 	rootCmd.Flags().StringVarP(&flags.method, "method", "X", "GET", "HTTP method to use")
 
 }
