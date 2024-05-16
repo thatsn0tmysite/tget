@@ -357,13 +357,13 @@ var rootCmd = &cobra.Command{
 
 							bar.IncrInt64(int64(written))
 						}
-
 					}(clients[i])
 				}
 
 			})
 		}
 
+		wg.Wait()
 	},
 }
 
