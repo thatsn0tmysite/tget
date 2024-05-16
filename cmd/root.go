@@ -63,7 +63,8 @@ var flags tgetFlags
 var rootCmd = &cobra.Command{
 	Use:   "tget [flags] <url|file> [...url|file]",
 	Short: "A (fast) Tor file downloader",
-	Long:  `A file downloader which uses multiple Tor instances to try to use all available bandwidth`,
+	Long: `A file downloader which uses multiple Tor instances to try to use all available bandwidth.
+	By n0tme (@thatsn0tmysite) https://thatsn0tmy.site`,
 	Run: func(cmd *cobra.Command, args []string) {
 		//Setup logger
 		if flags.logPath != "" {
@@ -73,6 +74,12 @@ var rootCmd = &cobra.Command{
 			}
 			mw := io.MultiWriter(os.Stdout, logFile)
 			log.SetOutput(mw)
+		}
+
+		if len(args) < 1 {
+			fmt.Println("No urls or files specified!")
+			cmd.Root().Help()
+			return
 		}
 
 		//Check if tor is installed (aka we have a valid tor-path)
