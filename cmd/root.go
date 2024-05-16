@@ -63,8 +63,8 @@ var flags tgetFlags
 var rootCmd = &cobra.Command{
 	Use:   "tget [flags] <url|file> [...url|file]",
 	Short: "A (fast) Tor file downloader",
-	Long: `A file downloader which uses multiple Tor instances to try to use all available bandwidth.
-	By n0tme (@thatsn0tmysite) https://thatsn0tmy.site`,
+	Long: `Torget is a Tor aware file downloader which uses multiple Tor instances to try to use all available bandwidth.
+	Made by thatsn0tmysite (aka n0tme) Blog: https://thatsn0tmy.site`,
 	Run: func(cmd *cobra.Command, args []string) {
 		//Setup logger
 		if flags.logPath != "" {
