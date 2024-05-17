@@ -203,7 +203,6 @@ var rootCmd = &cobra.Command{
 			}
 
 			tors = append(tors, torInstance)
-			defer torInstance.Close()
 			torswg.Add(1)
 			go func(id int, c *http.Client) {
 				defer torswg.Done()
@@ -371,6 +370,11 @@ var rootCmd = &cobra.Command{
 		}
 
 		wg.Wait()
+
+		log.Println("terminating tor instances...")
+		for _, t := range tors {
+			t.Close()
+		}
 	},
 }
 
