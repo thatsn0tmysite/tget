@@ -3,12 +3,110 @@ package tget
 import (
 	_ "embed"
 	"fmt"
+	"io"
+	"log"
 	"net"
+	"net/http"
 	"os"
+	"strconv"
+	"strings"
+
+	"github.com/vbauerster/mpb/v8"
 )
 
 //go:embed torrc
 var TorrcTemplate string
+
+type TorGet struct {
+}
+
+func PrepareRequest(req *http.Request, headers []string, cookies string, body string) {
+	for _, h := range headers {
+		split := strings.Split(h, "=")
+		k := split[0]
+		v := ""
+		if len(split) > 1 {
+			v = strings.Join(split[1:], "=")
+		}
+
+		req.Header.Add(k, v)
+	}
+	if cookies != "" {
+		req.Header.Add("Cookie", cookies)
+	}
+	if len(body) > 0 {
+		req.Body = io.NopCloser(strings.NewReader(body))
+	}
+}
+
+func DownloadUrl(c *http.Client, req *http.Request, outPath string, tryContinue, overwrite bool, bar *mpb.Bar) {
+	log.Printf("client downloading %v to %v\n", req.URL.String(), outPath)
+
+	currentSize := 0
+	if stat, err := os.Stat(outPath); err == nil {
+		// TODO: implement proper resume with etag/filehash/Ifrange etc, check if accpet-range is supported, etc
+		if tryContinue && !overwrite {
+			currentSize := stat.Size()
+			log.Printf("%v found on disk, user asked to attempt a resume (%d)\n", outPath, currentSize)
+			req.Header.Set("range", fmt.Sprintf("%d-", currentSize))
+		}
+
+		//in case overwrite is set, start from the beginning anyway
+		if overwrite {
+			currentSize = 0
+			req.Header.Del("range")
+		}
+	}
+
+	out, err := os.OpenFile(outPath, os.O_APPEND|os.O_CREATE|os.O_RDWR, 0644)
+	if err != nil {
+		log.Println(err)
+		return
+	}
+	defer out.Close()
+	out.Seek(0, currentSize)
+
+	resp, err := c.Do(req)
+	if err != nil {
+		log.Println(err)
+		return
+	}
+	defer resp.Body.Close()
+
+	totalBytes, err := strconv.Atoi(resp.Header.Get("content-length"))
+	if err != nil {
+		totalBytes = -1
+	}
+
+	log.Printf("%v size is %d\n", req.URL, totalBytes)
+	bar.SetTotal(int64(totalBytes), false)
+
+	for {
+		var buf []byte
+
+		_, err := resp.Body.Read(buf)
+		if err != nil {
+			log.Println(err)
+			break
+		}
+		if err == io.EOF {
+			break
+		}
+
+		written, err := out.Write(buf)
+		if err != nil {
+			log.Println(err)
+			break
+		}
+
+		//bar.IncrInt64(int64(written))
+		bar.IncrBy(written)
+
+		if written == 0 {
+			break
+		}
+	}
+}
 
 func GetFilename(file string, attempt int) string {
 	if _, err := os.Stat(file); err == os.ErrNotExist {

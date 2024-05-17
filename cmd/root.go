@@ -15,7 +15,6 @@ import (
 	"net/url"
 	"os"
 	"path"
-	"strconv"
 	"strings"
 	"sync"
 	"text/template"
@@ -249,132 +248,48 @@ var rootCmd = &cobra.Command{
 		log.Printf("chunks: %v\n", chunks)
 
 		var wg sync.WaitGroup
+
 		p, _ := ants.NewPool(flags.concurrency)
 
 		bars := mpb.New(mpb.WithWaitGroup(&wg))
 
 		//Feed chunks to workers
 		for i := range flags.instances {
-			log.Printf("instance %d will download %v URLs\n", i, len(chunks[i]))
-
 			chunk := chunks[i]
-			p.Submit(func() {
-				//Worker
-				for _, url := range chunk {
-					wg.Add(1)
+			for _, url := range chunk {
+				log.Printf("instance %d will download %v URLs\n", i, len(chunks[i]))
 
-					go func(c *http.Client) {
-						defer wg.Done()
+				req, _ := http.NewRequest(flags.method, url, nil)
+				tget.PrepareRequest(req, flags.headers, flags.cookies, flags.body)
 
-						req, _ := http.NewRequest(flags.method, url, nil)
-
-						//populate headers, cookies, etc
-						for _, h := range flags.headers {
-							split := strings.Split(h, "=")
-							k := split[0]
-							v := ""
-							if len(split) > 1 {
-								v = strings.Join(split[1:], "=")
-							}
-
-							req.Header.Add(k, v)
-						}
-
-						if flags.cookies != "" {
-							req.Header.Add("Cookie", flags.cookies)
-						}
-
-						if len(flags.body) > 0 {
-							req.Body = io.NopCloser(strings.NewReader(flags.body))
-						}
-
-						baseFileName := path.Base(req.URL.Path)
-						if baseFileName == "." || baseFileName == "/" || baseFileName == "" {
-							baseFileName = fmt.Sprintf("%v_index.html", req.URL.Host)
-						}
-						if !flags.ovewrite {
-							baseFileName = tget.GetFilename(baseFileName, 0) // if path is / or "" we should save as index.html.<attempt>
-						}
-
-						outFilePath := path.Join(flags.outPath, baseFileName)
-						log.Printf("client %d downloading %v to %v\n", i, url, outFilePath)
-
-						currentSize := 0
-						if stat, err := os.Stat(outFilePath); err == nil {
-							// TODO: implement proper resume with etag/filehash/Ifrange etc, check if accpet-range is supported, etc
-							if flags.tryContinue && !flags.ovewrite {
-								currentSize := stat.Size()
-								log.Printf("%v found on disk, user asked to attempt a resume (%d)\n", outFilePath, currentSize)
-								req.Header.Set("range", fmt.Sprintf("%d-", currentSize))
-							}
-
-							//in case overwrite is set, start from the beginning anyway
-							if flags.ovewrite {
-								currentSize = 0
-								req.Header.Del("range")
-							}
-						}
-
-						out, err := os.OpenFile(outFilePath, os.O_APPEND|os.O_CREATE|os.O_RDWR, 0644)
-						if err != nil {
-							log.Println(err)
-							return
-						}
-						out.Seek(0, currentSize)
-
-						resp, err := c.Do(req)
-						if err != nil {
-							log.Println(err)
-							return
-						}
-						defer resp.Body.Close()
-
-						totalBytes, err := strconv.Atoi(resp.Header.Get("content-length"))
-						if err != nil {
-							totalBytes = -1
-						}
-
-						bar := bars.AddBar(
-							int64(totalBytes),
-							mpb.PrependDecorators(
-								// simple name decorator
-								decor.Name(baseFileName),
-								// decor.DSyncWidth bit enables column width synchronization
-								decor.Percentage(decor.WCSyncSpace),
-							),
-							mpb.AppendDecorators(
-								// replace ETA decorator with "done" message, OnComplete event
-								decor.OnComplete(
-									// ETA decorator with ewma age of 30
-									decor.EwmaETA(decor.ET_STYLE_GO, 30, decor.WCSyncWidth), "done",
-								),
-							),
-						)
-
-						for {
-							var buf []byte
-
-							_, err := resp.Body.Read(buf)
-							if err != nil {
-								log.Println(err)
-								break
-							}
-							if err == io.EOF {
-								break
-							}
-
-							written, err := out.Write(buf)
-							if err != nil {
-								log.Println(err)
-								break
-							}
-
-							bar.IncrInt64(int64(written))
-						}
-					}(clients[i])
+				baseFileName := path.Base(req.URL.Path)
+				if baseFileName == "." || baseFileName == "/" || baseFileName == "" {
+					baseFileName = fmt.Sprintf("%v_index.html", req.URL.Host)
+				}
+				if !flags.ovewrite {
+					baseFileName = tget.GetFilename(baseFileName, 0) // if path is / or "" we should save as index.html.<attempt>
 				}
 
-			})
+				outFilePath := path.Join(flags.outPath, baseFileName)
+
+				bar := bars.AddBar(
+					-1,
+					mpb.PrependDecorators(
+						decor.Name(baseFileName),
+						decor.Percentage(decor.WCSyncSpace),
+					),
+					mpb.AppendDecorators(
+						decor.OnComplete(
+							decor.EwmaETA(decor.ET_STYLE_GO, 30, decor.WCSyncWidth), "done",
+						),
+					),
+				)
+				wg.Add(1)
+				p.Submit(func() {
+					defer wg.Done()
+					tget.DownloadUrl(clients[i], req, outFilePath, flags.tryContinue, flags.ovewrite, bar)
+				})
+			}
 		}
 
 		bars.Wait()
@@ -399,6 +314,7 @@ func Execute() {
 func init() {
 	//If tor already installed, use Tor's location as default tor path
 	torPath := which.Which("tor")
+	cwd, _ := os.Getwd()
 
 	// General runtime flags
 	rootCmd.Flags().StringVarP(&flags.conf, "conf", "c", "", ".torrc template file to use")
@@ -411,7 +327,7 @@ func init() {
 	rootCmd.Flags().StringVarP(&flags.logPath, "log-path", "l", "", "path to save logs at")
 	rootCmd.Flags().StringVarP(&flags.socksVersion, "socks-version", "S", "socks5", "socks version to use")
 	rootCmd.Flags().StringVar(&flags.testDomain, "test-domain", "https://thatsn0tmy.site", "website to use while testing if Tor is up")
-	rootCmd.Flags().StringVarP(&flags.outPath, "out-path", "o", ".", "path to save downloaded files in")
+	rootCmd.Flags().StringVarP(&flags.outPath, "out-path", "o", cwd, "path to save downloaded files in")
 	rootCmd.Flags().BoolVarP(&flags.verbose, "verbose", "v", false, "be (very) verbose")
 	rootCmd.Flags().BoolVarP(&flags.ovewrite, "ovewrite", "O", false, "overwrite file(s) if they already exist")
 	rootCmd.Flags().BoolVar(&flags.tryContinue, "continue", false, "attempt to continue a previously interrupted download")
