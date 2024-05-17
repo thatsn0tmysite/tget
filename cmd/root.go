@@ -252,6 +252,7 @@ var rootCmd = &cobra.Command{
 		p, _ := ants.NewPool(flags.concurrency)
 
 		bars := mpb.New(mpb.WithWaitGroup(&wg))
+
 		//Feed chunks to workers
 		for i := range flags.instances {
 			log.Printf("instance %d will download %v URLs\n", i, len(chunks[i]))
@@ -261,9 +262,10 @@ var rootCmd = &cobra.Command{
 				//Worker
 				for _, url := range chunk {
 					wg.Add(1)
-					defer wg.Done()
 
 					go func(c *http.Client) {
+						defer wg.Done()
+
 						req, _ := http.NewRequest(flags.method, url, nil)
 
 						//populate headers, cookies, etc
@@ -329,8 +331,7 @@ var rootCmd = &cobra.Command{
 
 						totalBytes, err := strconv.Atoi(resp.Header.Get("content-length"))
 						if err != nil {
-							log.Println(err)
-							return
+							totalBytes = -1
 						}
 
 						bar := bars.AddBar(
@@ -340,6 +341,13 @@ var rootCmd = &cobra.Command{
 								decor.Name(baseFileName),
 								// decor.DSyncWidth bit enables column width synchronization
 								decor.Percentage(decor.WCSyncSpace),
+							),
+							mpb.AppendDecorators(
+								// replace ETA decorator with "done" message, OnComplete event
+								decor.OnComplete(
+									// ETA decorator with ewma age of 30
+									decor.EwmaETA(decor.ET_STYLE_GO, 30, decor.WCSyncWidth), "done",
+								),
 							),
 						)
 
@@ -369,11 +377,12 @@ var rootCmd = &cobra.Command{
 			})
 		}
 
+		bars.Wait()
 		wg.Wait()
 
-		log.Println("terminating tor instances...")
+		log.Println("terminating Tor instances...")
 		for _, t := range tors {
-			t.Close()
+			defer t.Close()
 		}
 	},
 }
