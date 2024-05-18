@@ -40,14 +40,14 @@ func PrepareRequest(req *http.Request, headers []string, cookies string, body st
 }
 
 func DownloadUrl(c *http.Client, req *http.Request, outPath string, tryContinue, overwrite bool, bar *mpb.Bar) {
-	log.Printf("client downloading %v to %v\n", req.URL.String(), outPath)
+	//log.Printf("client downloading %v to %v\n", req.URL.String(), outPath)
 
 	currentSize := 0
 	if stat, err := os.Stat(outPath); err == nil {
 		// TODO: implement proper resume with etag/filehash/Ifrange etc, check if accpet-range is supported, etc
 		if tryContinue && !overwrite {
 			currentSize := stat.Size()
-			log.Printf("%v found on disk, user asked to attempt a resume (%d)\n", outPath, currentSize)
+			//log.Printf("%v found on disk, user asked to attempt a resume (%d)\n", outPath, currentSize)
 			req.Header.Set("range", fmt.Sprintf("%d-", currentSize))
 		}
 
@@ -103,7 +103,6 @@ func DownloadUrl(c *http.Client, req *http.Request, outPath string, tryContinue,
 		}
 
 		bar.IncrBy(written)
-
 	}
 }
 

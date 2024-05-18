@@ -15,6 +15,7 @@ import (
 	"net/url"
 	"os"
 	"path"
+	"regexp"
 	"strings"
 	"sync"
 	"text/template"
@@ -63,7 +64,7 @@ var rootCmd = &cobra.Command{
 	Use:   "tget [flags] <url|file> [...url|file]",
 	Short: "A (fast) Tor file downloader",
 	Long: `Torget is a Tor aware file downloader which uses multiple Tor instances to try to use all available bandwidth.
-	Made by thatsn0tmysite (aka n0tme) Blog: https://thatsn0tmy.site`,
+	Made by thatsn0tmysite (aka n0tme) | Blog: https://thatsn0tmy.site`,
 	Run: func(cmd *cobra.Command, args []string) {
 		//Setup logger
 		if flags.logPath != "" {
@@ -98,7 +99,9 @@ var rootCmd = &cobra.Command{
 		if len(flags.ports) < flags.instances {
 			missing := (flags.instances - len(flags.ports))
 
-			log.Printf("not enough ports provided to fill instances assigned: %v, missing %v...\n", flags.ports, missing)
+			if flags.verbose {
+				log.Printf("not enough ports provided to fill instances assigned: %v, missing %v...\n", flags.ports, missing)
+			}
 			ports, errors := tget.GetFreePorts(missing)
 			if len(errors) > 0 {
 				for _, e := range errors {
@@ -108,19 +111,27 @@ var rootCmd = &cobra.Command{
 			}
 
 			for _, port := range ports {
-				log.Printf("found free port for SockPort: %v...\n", port)
+				if flags.verbose {
+					log.Printf("found free port for SockPort: %v...\n", port)
+				}
 				flags.ports = append(flags.ports, uint(port))
 			}
 		}
-		log.Printf("using ports: %v\n", flags.ports)
 
-		log.Printf("preparing %d instances of Tor...\n", flags.instances)
+		if flags.verbose {
+			log.Printf("using ports: %v\n", flags.ports)
+			log.Printf("preparing %d instances of Tor...\n", flags.instances)
+		}
 		var torrc string
 		if flags.conf == "" {
-			log.Printf("using default .torrc template\n")
+			if flags.verbose {
+				log.Printf("using default .torrc template\n")
+			}
 			torrc = tget.TorrcTemplate
 		} else {
-			log.Printf("using provided .torrc template: %s\n", flags.conf)
+			if flags.verbose {
+				log.Printf("using provided .torrc template: %s\n", flags.conf)
+			}
 			dat, err := os.ReadFile(flags.conf)
 			if err != nil {
 				log.Fatalf("failed to read .torrc template file: %s\n", flags.conf)
@@ -143,7 +154,9 @@ var rootCmd = &cobra.Command{
 			if err != nil {
 				log.Fatal(err)
 			}
-			log.Printf("creating temp torrc file at: %s\n", file.Name())
+			if flags.verbose {
+				log.Printf("creating temp torrc file at: %s\n", file.Name())
+			}
 
 			torConf := template.Must(template.New(file.Name()).Parse(torrc))
 			err = torConf.Execute(file, struct {
@@ -207,7 +220,9 @@ var rootCmd = &cobra.Command{
 				defer torswg.Done()
 
 				for {
-					log.Printf("waiting for tor instance %v to start...\n", i)
+					if flags.verbose {
+						log.Printf("waiting for tor instance %v to start...\n", i)
+					}
 
 					_, err := c.Get(flags.testDomain)
 					if err != nil {
@@ -215,7 +230,9 @@ var rootCmd = &cobra.Command{
 						continue
 					}
 
-					log.Printf("instance %v ready!\n", i)
+					if flags.verbose {
+						log.Printf("instance %v ready!\n", i)
+					}
 					break
 				}
 
@@ -224,10 +241,14 @@ var rootCmd = &cobra.Command{
 
 		//Wait for all tor instances to be ready
 		torswg.Wait()
-		log.Printf("created %d http Tor clients using %d Tor instances\n", len(clients), flags.instances)
-		log.Println("Tor instances:", tors)
+		if flags.verbose {
+			log.Printf("created %d http Tor clients using %d Tor instances\n", len(clients), flags.instances)
+			log.Println("Tor instances:", tors)
+		}
 
 		//Get list of URLs
+		isEmptyRegex, _ := regexp.Compile(`^\s*$z`)
+
 		urls := args
 		if flags.fromFile {
 			urls = []string{}
@@ -237,34 +258,49 @@ var rootCmd = &cobra.Command{
 					log.Fatalf("failed to open %s: %v\n", a, err)
 					continue
 				}
-				urls = strings.Split(string(data), "\n")
+				urls = []string{}
+
+				for _, url := range strings.Split(string(data), "\n") {
+					if !isEmptyRegex.MatchString(url) {
+						urls = append(urls, url)
+					}
+				}
+
 			}
 		}
 
-		//Wait for tors to go online
-
-		log.Printf("total URLs: %d\n", len(urls))
 		chunks := tget.ChunkBy(urls, flags.instances)
-		log.Printf("chunks: %v\n", chunks)
+		if flags.verbose {
+			log.Printf("total URLs: %d\n", len(urls))
+			log.Printf("chunks: %v\n", chunks)
+		}
 
 		var wg sync.WaitGroup
 
-		p, _ := ants.NewPool(flags.concurrency)
+		//p, _ := ants.NewPool(flags.concurrency)
 
 		bars := mpb.New(mpb.WithWaitGroup(&wg))
 
 		//Feed chunks to workers
 		for i := range flags.instances {
+			p, _ := ants.NewPool(flags.concurrency) // each "instance"/chunk gets a pool
+
 			chunk := chunks[i]
 			for _, url := range chunk {
-				log.Printf("instance %d will download %v URLs\n", i, len(chunks[i]))
+				if flags.verbose {
+					log.Printf("instance %d will download %v URLs\n", i, len(chunks[i]))
+				}
 
 				req, _ := http.NewRequest(flags.method, url, nil)
 				tget.PrepareRequest(req, flags.headers, flags.cookies, flags.body)
 
 				baseFileName := path.Base(req.URL.Path)
-				if baseFileName == "." || baseFileName == "/" || baseFileName == "" {
+				if baseFileName == "." || baseFileName == "/" {
 					baseFileName = fmt.Sprintf("%v_index.html", req.URL.Host)
+					if flags.verbose {
+						log.Printf("instance %d will download %v URLs\n", i, req.URL.Host)
+						log.Printf("instance %d will download %v (%v)\n", i, baseFileName, req)
+					}
 				}
 				if !flags.ovewrite {
 					baseFileName = tget.GetFilename(baseFileName, 0) // if path is / or "" we should save as index.html.<attempt>
@@ -280,7 +316,7 @@ var rootCmd = &cobra.Command{
 					),
 					mpb.AppendDecorators(
 						decor.OnComplete(
-							decor.EwmaETA(decor.ET_STYLE_GO, 30, decor.WCSyncWidth), "done",
+							decor.AverageETA(decor.ET_STYLE_GO, decor.WCSyncWidth), "completed",
 						),
 					),
 				)
@@ -295,7 +331,9 @@ var rootCmd = &cobra.Command{
 		bars.Wait()
 		wg.Wait()
 
-		log.Println("terminating Tor instances...")
+		if flags.verbose {
+			log.Println("terminating Tor instances...")
+		}
 		for _, t := range tors {
 			defer t.Close()
 		}
