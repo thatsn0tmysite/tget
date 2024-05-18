@@ -81,15 +81,18 @@ func DownloadUrl(c *http.Client, req *http.Request, outPath string, tryContinue,
 	log.Printf("%v size is %d\n", req.URL, totalBytes)
 	bar.SetTotal(int64(totalBytes), false)
 
+	//start := time.Now()
 	for {
-		var buf []byte
+		//defer bar.EwmaIncrement(time.Since(start))
+
+		buf := make([]byte, 4096) // Create a buffer of 4KB
 
 		_, err := resp.Body.Read(buf)
-		if err != nil {
-			log.Println(err)
+		if err == io.EOF {
 			break
 		}
-		if err == io.EOF {
+		if err != nil {
+			log.Println(err)
 			break
 		}
 
@@ -99,12 +102,8 @@ func DownloadUrl(c *http.Client, req *http.Request, outPath string, tryContinue,
 			break
 		}
 
-		//bar.IncrInt64(int64(written))
 		bar.IncrBy(written)
 
-		if written == 0 {
-			break
-		}
 	}
 }
 
