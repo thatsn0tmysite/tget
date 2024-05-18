@@ -34,5 +34,5 @@ jobs:
           # 'latest', 'nightly', or a semver
           version: latest
           args: release --clean
-          env:
-            GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
