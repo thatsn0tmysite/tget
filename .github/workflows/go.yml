@@ -34,3 +34,5 @@ jobs:
           # 'latest', 'nightly', or a semver
           varsion: "~> v1"
           args: release --clean
+          env:
+            GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
