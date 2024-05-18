@@ -29,6 +29,12 @@ If you find this thing useful leave me a star or contribute, and consider [donat
 - [ ] Tests
 - [ ] Insert fancy benchmark comparison gif to readme
 
+## Build
+To build simply `git clone` this repo and run:
+```bash
+go build -o tget
+```
+
 
 ## Usage
 ```
