@@ -1,32 +1,33 @@
 ![torget logo](.images/logo.png "torget by thatsn0tmysite")
 
-#Torget (tget)
+# Torget (tget)
 
-Torget, or `tget` for short, is a http file downloader for Tor.
+Torget, or `tget` for short, is a http(s) file downloader for Tor made by [thatsn0tmysite](https://thatsn0tmy.site) (a.k.a. n0tme). 
 
-Where `tget` shines over other tools is its (ab)use of bandwith, spawning multiple Tor instances, it allows downloads of multiple files over multiple Tor clients, avoiding saturating the bandwith with concurrent downloads. 
+Where `tget` "shines" over other tools is its (ab)use of bandwith, it spawns multiple Tor instances, it allows downloads of multiple files over multiple Tor clients, avoiding saturating the bandwith with concurrent downloads. 
 
-This allows for faster parallel downloads and a more total badwith.
+Not the most novel nor elegant technique but... meh.
 
-Great for your daily dataleaks downloads!
+This allows for faster parallel downloads and a more total (theorical) bandwith.
 
-Here is a quick comparison of a single Tor instance with parallel downloads vs tget:
+| Great for your daily dataleaks dumps (or anything else you use Tor for!).
+| - Someone, probably.
 
-TODO: insert fancy gif here
+This tool makes use of the handy [bine](https://github.com/cretz/bine) library and the fancy [mpb](https://github.com/vbauerster/mpb) library!
 
+If you find this thing useful leave me a star or contribute, and consider [donating to Tor too](https://donate.torproject.org/)!
 
-This tool makes use of the handy bine library...
-
-## Features / TODO
+## Current features / TODOs
 - [x] Basic functionality (multiple tor instances spawning)
 - [x] Download from URLs or files
 - [x] Allow download resume
 - [x] Custom headers/cookies
 - [x] Fancy progress bars
-- [ ] Better logging
+- [ ] Better/moar colors logging (use Tor colors)
 - [x] Onion themed logo
-- [ ] Refactor code out of `cmd/root.go`
+- [ ] Refactor code out of `cmd/root.go` (**SOME** code refactored)
 - [ ] Tests
+- [ ] Insert fancy benchmark comparison gif to readme
 
 
 ## Usage
@@ -54,3 +55,7 @@ Flags:
   -k, --unsafe-tls             skip TLS certificates validation
 
 ```
+
+# Contribution
+Any contribution is welcome, so feel free to open issues and suggest features/fixes. 
+Also, as usual: "Sorry for the messy code"... I'll clean it up eventually.
