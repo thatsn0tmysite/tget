@@ -10,8 +10,8 @@ Not the most novel nor elegant technique but... meh.
 
 This allows for faster parallel downloads and a more total (theorical) bandwith.
 
-| Great for your daily dataleaks dumps (or anything else you use Tor for!).
-| - Someone, probably.
+> "Great for your daily dataleaks dumps (or anything else you use Tor for!)."
+> - Someone's mom, probably.
 
 This tool makes use of the handy [bine](https://github.com/cretz/bine) library and the fancy [mpb](https://github.com/vbauerster/mpb) library!
 
