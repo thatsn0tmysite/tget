@@ -20,7 +20,9 @@ var TorrcTemplate string
 type TorGet struct {
 }
 
-func PrepareRequest(req *http.Request, headers []string, cookies string, body string) {
+var Version = "v0.1"
+
+func PrepareRequest(req *http.Request, headers []string, cookies, useragent, body string) {
 	for _, h := range headers {
 		split := strings.Split(h, "=")
 		k := split[0]
@@ -36,6 +38,10 @@ func PrepareRequest(req *http.Request, headers []string, cookies string, body st
 	}
 	if len(body) > 0 {
 		req.Body = io.NopCloser(strings.NewReader(body))
+	}
+
+	if useragent != "" {
+		req.Header.Set("User-Agent", useragent)
 	}
 }
 

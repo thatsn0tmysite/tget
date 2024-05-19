@@ -54,6 +54,7 @@ type tgetFlags struct {
 	method    string
 	cookies   string
 	headers   []string
+	useragent string
 	unsafeTLS bool
 }
 
@@ -306,7 +307,7 @@ var rootCmd = &cobra.Command{
 				}
 
 				req, _ := http.NewRequest(flags.method, url, nil)
-				tget.PrepareRequest(req, flags.headers, flags.cookies, flags.body)
+				tget.PrepareRequest(req, flags.headers, flags.cookies, flags.body, flags.useragent)
 
 				baseFileName := path.Base(req.URL.Path)
 				if baseFileName == "." || baseFileName == "/" {
@@ -334,6 +335,7 @@ var rootCmd = &cobra.Command{
 						),
 					),
 				)
+
 				wg.Add(1)
 				p.Submit(func() {
 					defer wg.Done()
@@ -390,6 +392,7 @@ func init() {
 	rootCmd.Flags().StringSliceVarP(&flags.headers, "header", "H", []string{}, "header(s) to include in all requests")
 	rootCmd.Flags().StringVarP(&flags.cookies, "cookies", "C", "", "cookie(s) to include in all requests")
 	rootCmd.Flags().StringVarP(&flags.body, "data", "d", "", "body of request to send")
+	rootCmd.Flags().StringVarP(&flags.useragent, "useragent", "U", fmt.Sprintf("tget/%v", tget.Version), "useraget to use when sending requests")
 
 	rootCmd.Flags().StringVarP(&flags.method, "method", "X", "GET", "HTTP method to use")
 
