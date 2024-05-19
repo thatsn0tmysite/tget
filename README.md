@@ -30,9 +30,10 @@ If you find this thing useful leave me a star or contribute, and consider [donat
 - [ ] Insert fancy benchmark comparison gif to readme
 
 ## Build
-To build simply `git clone` this repo and run:
+To build simply `git clone` this repo and run this from torget's folder:
 ```bash
-go build -o tget
+mkdir bin
+go build -o bin/tget
 ```
 
 
