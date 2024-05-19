@@ -143,6 +143,16 @@ var rootCmd = &cobra.Command{
 		var torswg sync.WaitGroup
 		var tors []*tor.Tor
 		var clients []*http.Client
+
+		torProgress := mpb.New(mpb.WithWaitGroup(&torswg))
+		torBar := torProgress.New(int64(flags.instances),
+			mpb.BarStyle(),
+			mpb.PrependDecorators(
+				decor.Name("Starting Tor instances"),
+			),
+			mpb.AppendDecorators(decor.Percentage()),
+		)
+
 		for i := 0; i < flags.instances; i++ {
 			//Create temp dir and torrc files
 			dir, err := os.MkdirTemp(os.TempDir(), "tget_*")
@@ -185,7 +195,9 @@ var rootCmd = &cobra.Command{
 				log.Fatalf("failed to obtain proxy dialer: %v\n", err)
 				continue
 			}
-			log.Println(tbDialer)
+			if flags.verbose {
+				log.Println("tbDialer:", tbDialer)
+			}
 
 			tbTransport := &http.Transport{
 				Dial: tbDialer.Dial,
@@ -216,7 +228,7 @@ var rootCmd = &cobra.Command{
 
 			tors = append(tors, torInstance)
 			torswg.Add(1)
-			go func(id int, c *http.Client) {
+			go func(id int, c *http.Client, progress *mpb.Bar) {
 				defer torswg.Done()
 
 				for {
@@ -236,18 +248,20 @@ var rootCmd = &cobra.Command{
 					break
 				}
 
-			}(i, clients[i])
+				progress.IncrBy(1)
+			}(i, clients[i], torBar)
 		}
 
 		//Wait for all tor instances to be ready
-		torswg.Wait()
+		//torswg.Wait()
+		torProgress.Wait()
 		if flags.verbose {
 			log.Printf("created %d http Tor clients using %d Tor instances\n", len(clients), flags.instances)
 			log.Println("Tor instances:", tors)
 		}
 
 		//Get list of URLs
-		isEmptyRegex, _ := regexp.Compile(`^\s*$z`)
+		isEmptyRegex, _ := regexp.Compile(`^\s*$`)
 
 		urls := args
 		if flags.fromFile {
