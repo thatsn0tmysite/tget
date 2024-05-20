@@ -333,18 +333,16 @@ var rootCmd = &cobra.Command{
 
 				outFilePath := path.Join(flags.outPath, baseFileName)
 
+				//TODO: rework to make it look better maybe: filenam [bar] [ETA] [status/percentage]?
 				bar := bars.AddBar(
 					100,
 					mpb.PrependDecorators(
 						decor.Name(baseFileName),
-						decor.Percentage(decor.WCSyncSpace),
 					),
 					mpb.AppendDecorators(
-						decor.OnComplete(
-							decor.AverageETA(decor.ET_STYLE_GO, decor.WCSyncWidth), "completed",
-						),
+						decor.Percentage(decor.WCSyncSpace),
 						decor.OnAbort(
-							decor.AverageETA(decor.ET_STYLE_GO, decor.WCSyncWidth), "aborted (redirect)",
+							decor.AverageETA(decor.ET_STYLE_GO, decor.WCSyncWidth), "aborted",
 						),
 					),
 				)
