@@ -50,12 +50,13 @@ type tgetFlags struct {
 	tryContinue  bool
 	testDomain   string
 
-	body      string
-	method    string
-	cookies   string
-	headers   []string
-	useragent string
-	unsafeTLS bool
+	body           string
+	method         string
+	cookies        string
+	headers        []string
+	useragent      string
+	unsafeTLS      bool
+	followRedirect bool
 }
 
 var flags tgetFlags
@@ -73,8 +74,13 @@ var rootCmd = &cobra.Command{
 			if err != nil {
 				log.Fatalf("error creating logfile: %s\n", err)
 			}
-			mw := io.MultiWriter(os.Stdout, logFile)
-			log.SetOutput(mw)
+
+			if flags.verbose {
+				mw := io.MultiWriter(os.Stdout, logFile)
+				log.SetOutput(mw)
+			} else {
+				log.SetOutput(logFile)
+			}
 		}
 
 		if len(args) < 1 {
@@ -324,7 +330,7 @@ var rootCmd = &cobra.Command{
 				outFilePath := path.Join(flags.outPath, baseFileName)
 
 				bar := bars.AddBar(
-					-1,
+					100,
 					mpb.PrependDecorators(
 						decor.Name(baseFileName),
 						decor.Percentage(decor.WCSyncSpace),
@@ -333,19 +339,21 @@ var rootCmd = &cobra.Command{
 						decor.OnComplete(
 							decor.AverageETA(decor.ET_STYLE_GO, decor.WCSyncWidth), "completed",
 						),
+						decor.OnAbort(
+							decor.AverageETA(decor.ET_STYLE_GO, decor.WCSyncWidth), "aborted (redirect)",
+						),
 					),
 				)
 
 				wg.Add(1)
 				p.Submit(func() {
 					defer wg.Done()
-					tget.DownloadUrl(clients[i], req, outFilePath, flags.tryContinue, flags.ovewrite, bar)
+					tget.DownloadUrl(clients[i], req, outFilePath, flags.followRedirect, flags.tryContinue, flags.ovewrite, bar)
 				})
 			}
 		}
 
 		bars.Wait()
-		wg.Wait()
 
 		if flags.verbose {
 			log.Println("terminating Tor instances...")
@@ -388,6 +396,7 @@ func init() {
 	rootCmd.Flags().IntVarP(&flags.maxWait, "timeout", "T", 0, "max time to wait for Tor before canceling (0: no timeout)")
 
 	// Headers, cookies, ssl, etc
+	rootCmd.Flags().BoolVarP(&flags.followRedirect, "follow-redirect", "f", false, "follow HTTP redirects")
 	rootCmd.Flags().BoolVarP(&flags.unsafeTLS, "unsafe-tls", "k", false, "skip TLS certificates validation")
 	rootCmd.Flags().StringSliceVarP(&flags.headers, "header", "H", []string{}, "header(s) to include in all requests")
 	rootCmd.Flags().StringVarP(&flags.cookies, "cookies", "C", "", "cookie(s) to include in all requests")

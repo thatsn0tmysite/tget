@@ -1,6 +1,8 @@
 package tget
 
 import (
+	"bufio"
+	"bytes"
 	_ "embed"
 	"fmt"
 	"io"
@@ -21,6 +23,12 @@ type TorGet struct {
 }
 
 var Version = "v0.1"
+
+type LogProgressWriter struct{}
+
+func (pw LogProgressWriter) Write(data []byte) (int, error) {
+	return len(data), nil
+}
 
 func PrepareRequest(req *http.Request, headers []string, cookies, useragent, body string) {
 	for _, h := range headers {
@@ -45,8 +53,38 @@ func PrepareRequest(req *http.Request, headers []string, cookies, useragent, bod
 	}
 }
 
-func DownloadUrl(c *http.Client, req *http.Request, outPath string, tryContinue, overwrite bool, bar *mpb.Bar) {
-	//log.Printf("client downloading %v to %v\n", req.URL.String(), outPath)
+func DownloadUrl(c *http.Client, req *http.Request, outPath string, followRedir, tryContinue, overwrite bool, bar *mpb.Bar) {
+	resp, err := c.Do(req)
+	if err != nil {
+		log.Println(err)
+		return
+	}
+	defer resp.Body.Close()
+	log.Printf("client downloading %v to %v (%d) -> %v\n", req.URL.String(), outPath, resp.StatusCode, resp.Header.Get("Location"))
+
+	if (resp.StatusCode >= 300 && resp.StatusCode <= 399) || resp.Header.Get("location") != "" {
+		if followRedir {
+			redirectUrl, err := resp.Location()
+			if err != nil {
+				bar.Abort(false)
+				return
+			}
+
+			// create a new GET request to follow the redirect
+			req.URL = redirectUrl
+			resp, err = c.Do(req)
+			if err != nil {
+				bar.Abort(false)
+				return
+			}
+			defer resp.Body.Close()
+		} else {
+			log.Println("aborting")
+
+			bar.Abort(false)
+			return
+		}
+	}
 
 	currentSize := 0
 	if stat, err := os.Stat(outPath); err == nil {
@@ -72,44 +110,35 @@ func DownloadUrl(c *http.Client, req *http.Request, outPath string, tryContinue,
 	defer out.Close()
 	out.Seek(0, currentSize)
 
-	resp, err := c.Do(req)
-	if err != nil {
-		log.Println(err)
-		return
-	}
-	defer resp.Body.Close()
-
 	totalBytes, err := strconv.Atoi(resp.Header.Get("content-length"))
 	if err != nil {
 		totalBytes = -1
 	}
 
-	log.Printf("%v size is %d\n", req.URL, totalBytes)
+	//log.Printf("%v size is %d\n", req.URL, totalBytes)
 	bar.SetTotal(int64(totalBytes), false)
 
 	//start := time.Now()
+	var reader io.Reader = bufio.NewReader(resp.Body)
+	reader = io.TeeReader(reader, LogProgressWriter{})
+
+	//TODO: while we have data in body, write it... why is this so damn fuzzy???
 	for {
+		var buf bytes.Buffer
+		written, err := io.Copy(&buf, reader)
+
 		//defer bar.EwmaIncrement(time.Since(start))
-
-		buf := make([]byte, 4096) // Create a buffer of 4KB
-
-		_, err := resp.Body.Read(buf)
+		//buf := make([]byte, bufSize) // Create a buffer of 4KB
 		if err == io.EOF {
-			break
-		}
-		if err != nil {
-			log.Println(err)
+			log.Println("EOF", err)
 			break
 		}
 
-		written, err := out.Write(buf)
-		if err != nil {
-			log.Println(err)
-			break
-		}
+		bar.IncrBy(int(written))
 
-		bar.IncrBy(written)
 	}
+
+	log.Println(out.Name(), "done")
 }
 
 func GetFilename(file string, attempt int) string {
