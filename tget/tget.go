@@ -1,8 +1,6 @@
 package tget
 
 import (
-	"bufio"
-	"bytes"
 	_ "embed"
 	"fmt"
 	"io"
@@ -24,10 +22,14 @@ type TorGet struct {
 
 var Version = "v0.1"
 
-type LogProgressWriter struct{}
+type WriteCounter struct {
+	pbar *mpb.Bar
+}
 
-func (pw LogProgressWriter) Write(data []byte) (int, error) {
-	return len(data), nil
+func (wc *WriteCounter) Write(p []byte) (int, error) {
+	n := len(p)
+	wc.pbar.IncrBy(n)
+	return n, nil
 }
 
 func PrepareRequest(req *http.Request, headers []string, cookies, useragent, body string) {
@@ -119,24 +121,22 @@ func DownloadUrl(c *http.Client, req *http.Request, outPath string, followRedir,
 	bar.SetTotal(int64(totalBytes), false)
 
 	//start := time.Now()
-	var reader io.Reader = bufio.NewReader(resp.Body)
-	reader = io.TeeReader(reader, LogProgressWriter{})
 
-	//TODO: while we have data in body, write it... why is this so damn fuzzy???
-	for {
-		var buf bytes.Buffer
-		written, err := io.Copy(&buf, reader)
+	resp.Body = io.NopCloser(
+		io.TeeReader(
+			resp.Body,
+			&WriteCounter{
+				pbar: bar,
+			},
+		),
+	)
 
-		//defer bar.EwmaIncrement(time.Since(start))
-		//buf := make([]byte, bufSize) // Create a buffer of 4KB
-		if err == io.EOF {
-			log.Println("EOF", err)
-			break
-		}
-
-		bar.IncrBy(int(written))
-
+	w, err := io.Copy(out, resp.Body)
+	if err != nil && err != io.EOF {
+		log.Println("body:", resp.Body)
+		log.Println("copy error:", err)
 	}
+	log.Println("written", w, "to", out.Name())
 
 	log.Println(out.Name(), "done")
 }

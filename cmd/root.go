@@ -302,12 +302,16 @@ var rootCmd = &cobra.Command{
 
 		bars := mpb.New(mpb.WithWaitGroup(&wg))
 
+		startTime := time.Now()
+
 		//Feed chunks to workers
 		for i := range flags.instances {
 			p, _ := ants.NewPool(flags.concurrency) // each "instance"/chunk gets a pool
 
 			chunk := chunks[i]
 			for _, url := range chunk {
+				wg.Add(1)
+
 				if flags.verbose {
 					log.Printf("instance %d will download %v URLs\n", i, len(chunks[i]))
 				}
@@ -345,15 +349,14 @@ var rootCmd = &cobra.Command{
 					),
 				)
 
-				wg.Add(1)
 				p.Submit(func() {
 					defer wg.Done()
 					tget.DownloadUrl(clients[i], req, outFilePath, flags.followRedirect, flags.tryContinue, flags.ovewrite, bar)
 				})
 			}
 		}
-
 		bars.Wait()
+		log.Println("downloads took: ", (time.Since(startTime)))
 
 		if flags.verbose {
 			log.Println("terminating Tor instances...")
