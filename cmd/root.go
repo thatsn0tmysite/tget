@@ -335,12 +335,15 @@ var rootCmd = &cobra.Command{
 
 				//TODO: rework to make it look better maybe: filenam [bar] [ETA] [status/percentage]?
 				bar := bars.AddBar(
-					100,
+					0,
 					mpb.PrependDecorators(
 						decor.Name(baseFileName),
 					),
 					mpb.AppendDecorators(
+						decor.Counters(decor.SizeB1024(0), "% .1f / % .1f"),
+						decor.Name("|"),
 						decor.Percentage(decor.WCSyncSpace),
+						decor.Name("|"),
 						decor.OnAbort(
 							decor.AverageETA(decor.ET_STYLE_GO, decor.WCSyncWidth), "aborted",
 						),

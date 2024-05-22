@@ -23,12 +23,14 @@ type TorGet struct {
 var Version = "v0.1"
 
 type WriteCounter struct {
+	url  string
 	pbar *mpb.Bar
 }
 
 func (wc *WriteCounter) Write(p []byte) (int, error) {
 	n := len(p)
 	wc.pbar.IncrBy(n)
+	//log.Println("Incresed", wc.url, "by: ", n)
 	return n, nil
 }
 
@@ -56,13 +58,29 @@ func PrepareRequest(req *http.Request, headers []string, cookies, useragent, bod
 }
 
 func DownloadUrl(c *http.Client, req *http.Request, outPath string, followRedir, tryContinue, overwrite bool, bar *mpb.Bar) {
+	currentSize := 0
+	if stat, err := os.Stat(outPath); err == nil {
+		// TODO: implement proper resume with etag/filehash/Ifrange etc, check if accpet-range is supported, etc
+		if tryContinue && !overwrite {
+			currentSize := stat.Size()
+			//log.Printf("%v found on disk, user asked to attempt a resume (%d)\n", outPath, currentSize)
+			req.Header.Set("range", fmt.Sprintf("bytes=%d-", currentSize))
+		}
+
+		//in case overwrite is set, start from the beginning anyway
+		if overwrite {
+			currentSize = 0
+			req.Header.Del("range")
+		}
+	}
+
 	resp, err := c.Do(req)
 	if err != nil {
 		log.Println(err)
 		return
 	}
 	defer resp.Body.Close()
-	log.Printf("client downloading %v to %v (%d) -> %v\n", req.URL.String(), outPath, resp.StatusCode, resp.Header.Get("Location"))
+	log.Printf("client downloading %v to %v (%d) %v (size: %v)\n", req.URL.String(), outPath, resp.StatusCode, resp.Header.Get("Location"), resp.Header.Get("content-length"))
 
 	if (resp.StatusCode >= 300 && resp.StatusCode <= 399) || resp.Header.Get("location") != "" {
 		if followRedir {
@@ -88,33 +106,17 @@ func DownloadUrl(c *http.Client, req *http.Request, outPath string, followRedir,
 		}
 	}
 
-	currentSize := 0
-	if stat, err := os.Stat(outPath); err == nil {
-		// TODO: implement proper resume with etag/filehash/Ifrange etc, check if accpet-range is supported, etc
-		if tryContinue && !overwrite {
-			currentSize := stat.Size()
-			//log.Printf("%v found on disk, user asked to attempt a resume (%d)\n", outPath, currentSize)
-			req.Header.Set("range", fmt.Sprintf("%d-", currentSize))
-		}
-
-		//in case overwrite is set, start from the beginning anyway
-		if overwrite {
-			currentSize = 0
-			req.Header.Del("range")
-		}
-	}
-
 	out, err := os.OpenFile(outPath, os.O_APPEND|os.O_CREATE|os.O_RDWR, 0644)
 	if err != nil {
 		log.Println(err)
 		return
 	}
 	defer out.Close()
-	out.Seek(0, currentSize)
+	out.Seek(int64(currentSize), 0)
 
 	totalBytes, err := strconv.Atoi(resp.Header.Get("content-length"))
 	if err != nil {
-		totalBytes = -1
+		totalBytes = 0
 	}
 
 	//log.Printf("%v size is %d\n", req.URL, totalBytes)
@@ -126,18 +128,22 @@ func DownloadUrl(c *http.Client, req *http.Request, outPath string, followRedir,
 		io.TeeReader(
 			resp.Body,
 			&WriteCounter{
+				url:  req.URL.String(),
 				pbar: bar,
 			},
 		),
 	)
 
-	w, err := io.Copy(out, resp.Body)
+	_, err = io.Copy(out, resp.Body)
 	if err != nil && err != io.EOF {
-		log.Println("body:", resp.Body)
+		body, err := io.ReadAll(resp.Body)
+		log.Println("body:", body)
+		log.Println("err:", err)
 		log.Println("copy error:", err)
 	}
-	log.Println("written", w, "to", out.Name())
 
+	//log.Println("written", w, "to", out.Name())
+	bar.SetTotal(-1, true) // set as complete
 	log.Println(out.Name(), "done")
 }
 
