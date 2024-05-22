@@ -16,6 +16,9 @@ This tool makes use of the handy [bine](https://github.com/cretz/bine) and the f
 
 If you find this **obnoxious thing** useful leave me a star, fork or contribute, also consider [donating to Tor](https://donate.torproject.org/)!
 
+## Fancy gif
+![example usage](.images/demo.cast.svg)
+
 ## Current features / TODOs
 - [x] Basic functionality (multiple tor instances spawning)
 - [x] Download from URLs or files
