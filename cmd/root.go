@@ -337,7 +337,7 @@ var rootCmd = &cobra.Command{
 				bar := bars.AddBar(
 					0,
 					mpb.PrependDecorators(
-						decor.Name(baseFileName),
+						decor.Name(fmt.Sprintf("[T%d] %v", i, baseFileName)),
 					),
 					mpb.AppendDecorators(
 						decor.Counters(decor.SizeB1024(0), "% .1f / % .1f"),
