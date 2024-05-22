@@ -80,7 +80,7 @@ func DownloadUrl(c *http.Client, req *http.Request, outPath string, followRedir,
 		return
 	}
 	defer resp.Body.Close()
-	log.Printf("client downloading %v to %v (%d) %v (size: %v)\n", req.URL.String(), outPath, resp.StatusCode, resp.Header.Get("Location"), resp.Header.Get("content-length"))
+	//log.Printf("client downloading %v to %v (%d) %v (size: %v)\n", req.URL.String(), outPath, resp.StatusCode, resp.Header.Get("Location"), resp.Header.Get("content-length"))
 
 	if (resp.StatusCode >= 300 && resp.StatusCode <= 399) || resp.Header.Get("location") != "" {
 		if followRedir {
@@ -99,7 +99,7 @@ func DownloadUrl(c *http.Client, req *http.Request, outPath string, followRedir,
 			}
 			defer resp.Body.Close()
 		} else {
-			log.Println("aborting")
+			//log.Println("aborting")
 
 			bar.Abort(false)
 			return
@@ -136,15 +136,16 @@ func DownloadUrl(c *http.Client, req *http.Request, outPath string, followRedir,
 
 	_, err = io.Copy(out, resp.Body)
 	if err != nil && err != io.EOF {
-		body, err := io.ReadAll(resp.Body)
-		log.Println("body:", body)
-		log.Println("err:", err)
+		_, err := io.ReadAll(resp.Body)
+		//log.Println("body:", body)
+		//log.Println("err:", err)
 		log.Println("copy error:", err)
+		bar.Abort(false)
 	}
 
 	//log.Println("written", w, "to", out.Name())
 	bar.SetTotal(-1, true) // set as complete
-	log.Println(out.Name(), "done")
+	//log.Println(out.Name(), "done")
 }
 
 func GetFilename(file string, attempt int) string {

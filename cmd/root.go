@@ -357,7 +357,7 @@ var rootCmd = &cobra.Command{
 			}
 		}
 		bars.Wait()
-		log.Println("downloads took: ", (time.Since(startTime)))
+		log.Println("downloads of", len(urls), "files took: ", (time.Since(startTime)))
 
 		if flags.verbose {
 			log.Println("terminating Tor instances...")

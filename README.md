@@ -5,17 +5,16 @@
 Torget, or `tget` for short, is a http(s) file downloader for Tor made by [thatsn0tmysite](https://thatsn0tmy.site) (a.k.a. n0tme). 
 
 Where `tget` "shines" over other tools is its (ab)use of bandwith, it spawns multiple Tor instances, it allows downloads of multiple files over multiple Tor clients, avoiding saturating the bandwith with concurrent downloads. 
-
-Not the most novel nor elegant technique but... meh.
-
 This allows for faster parallel downloads and a more total (theorical) bandwith.
+
+Not the most novel (nor elegant) technique but... meh.
 
 > "Great for your daily dataleaks dumps (or anything else you use Tor for!)."
 > - Someone's mom, probably.
 
-This tool makes use of the handy [bine](https://github.com/cretz/bine) library and the fancy [mpb](https://github.com/vbauerster/mpb) library!
+This tool makes use of the handy [bine](https://github.com/cretz/bine) and the fancy [mpb](https://github.com/vbauerster/mpb) libraries!
 
-If you find this thing useful leave me a star or contribute, and consider [donating to Tor too](https://donate.torproject.org/)!
+If you find this **obnoxious thing** useful leave me a star, fork or contribute, and also consider [donating to Tor](https://donate.torproject.org/)!
 
 ## Current features / TODOs
 - [x] Basic functionality (multiple tor instances spawning)
@@ -36,10 +35,10 @@ mkdir bin
 go build -o bin/tget
 ```
 
-
 ## Usage
 ```
-A file downloader which uses multiple Tor instances to try to use all available bandwidth
+Torget is a Tor aware file downloader which uses multiple Tor instances to try to use all available bandwidth.
+        Made by thatsn0tmysite (aka n0tme) | Blog: https://thatsn0tmy.site
 
 Usage:
   tget [flags] <url|file> [...url|file]
@@ -47,7 +46,12 @@ Usage:
 Flags:
       --concurrency int        concurrency level (default 10)
   -c, --conf string            .torrc template file to use
-  -C, --cookie strings         cookie(s) to include in all requests
+      --continue               attempt to continue a previously interrupted download
+  -C, --cookies string         cookie(s) to include in all requests
+
+
+  -d, --data string            body of request to send
+  -f, --follow-redirect        follow HTTP redirects
   -F, --from-file              download from files instead of urls
   -H, --header strings         header(s) to include in all requests
   -h, --help                   help for tget
@@ -55,11 +59,16 @@ Flags:
   -n, --instances int          number of Tor instances to use (default 5)
   -l, --log-path string        path to save logs at
   -X, --method string          HTTP method to use (default "GET")
-  -o, --out-path string        path to save downloaded files in (default ".")
+  -o, --out-path string        path to save downloaded files in (default "/home/n0tme/Documents/Projects/tget")
+  -O, --ovewrite               overwrite file(s) if they already exist
   -p, --ports uints            ports to for Tor to listen on (default [])
   -S, --socks-version string   socks version to use (default "socks5")
+      --test-domain string     website to use while testing if Tor is up (default "https://thatsn0tmy.site")
+  -T, --timeout int            max time to wait for Tor before canceling (0: no timeout)
   -t, --tor-path string        path to Tor binary (default "/usr/bin/tor")
   -k, --unsafe-tls             skip TLS certificates validation
+  -U, --useragent string       useraget to use when sending requests (default "tget/v0.1")
+  -v, --verbose                be (very) verbose
 
 ```
 
