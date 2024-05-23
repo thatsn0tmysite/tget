@@ -353,7 +353,10 @@ var rootCmd = &cobra.Command{
 						decor.Name(fmt.Sprintf("[T%d] %v", i, baseFileName)),
 					),
 					mpb.AppendDecorators(
-						decor.Counters(decor.SizeB1024(0), "% .1f / % .1f"),
+						//decor.Counters(decor.SizeB1024(0), "% .1f / % .1f"),
+						decor.EwmaSpeed(decor.SizeB1024(0), " % .2f ", 60),
+						decor.Name("|"),
+						decor.Total(decor.SizeB1024(0), " %d "),
 						decor.Name("|"),
 						decor.Percentage(decor.WCSyncSpace),
 						decor.Name("|"),

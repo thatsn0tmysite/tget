@@ -22,18 +22,6 @@ type TorGet struct {
 
 var Version = "v0.1"
 
-type WriteCounter struct {
-	url  string
-	pbar *mpb.Bar
-}
-
-func (wc *WriteCounter) Write(p []byte) (int, error) {
-	n := len(p)
-	wc.pbar.IncrBy(n)
-	//log.Println("Incresed", wc.url, "by: ", n)
-	return n, nil
-}
-
 func PrepareRequest(req *http.Request, headers []string, cookies, useragent, body string) {
 	for _, h := range headers {
 		split := strings.Split(h, "=")
@@ -122,21 +110,14 @@ func DownloadUrl(c *http.Client, req *http.Request, outPath string, followRedir,
 	//log.Printf("%v size is %d\n", req.URL, totalBytes)
 	bar.SetTotal(int64(totalBytes), false)
 
-	//start := time.Now()
+	pw := bar.ProxyWriter(out)
+	pr := bar.ProxyReader(resp.Body)
+	defer pr.Close()
+	defer pw.Close()
 
-	resp.Body = io.NopCloser(
-		io.TeeReader(
-			resp.Body,
-			&WriteCounter{
-				url:  req.URL.String(),
-				pbar: bar,
-			},
-		),
-	)
-
-	_, err = io.Copy(out, resp.Body)
+	_, err = io.Copy(pw, pr)
 	if err != nil && err != io.EOF {
-		_, err := io.ReadAll(resp.Body)
+		_, err := io.ReadAll(pr)
 		//log.Println("body:", body)
 		//log.Println("err:", err)
 		log.Println("copy error:", err)
