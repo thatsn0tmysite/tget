@@ -8,6 +8,13 @@
 *.so
 *.dylib
 
+#asciinema recordings
+*.cast
+
+#Tor data-dirs
+data-dir*
+urls*.txt
+
 # Test binary, built with `go test -c`
 *.test
 
