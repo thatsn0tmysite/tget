@@ -51,8 +51,6 @@ Flags:
   -c, --conf string            .torrc template file to use
       --continue               attempt to continue a previously interrupted download
   -C, --cookies string         cookie(s) to include in all requests
-
-
   -d, --data string            body of request to send
   -f, --follow-redirect        follow HTTP redirects
   -F, --from-file              download from files instead of urls
@@ -60,17 +58,19 @@ Flags:
   -h, --help                   help for tget
       --host string            host running Tor (default "127.0.0.1")
   -n, --instances int          number of Tor instances to use (default 5)
+      --keep-alive             do not close Tor instances when done
   -l, --log-path string        path to save logs at
   -X, --method string          HTTP method to use (default "GET")
   -o, --out-path string        path to save downloaded files in (default "/home/n0tme/Documents/Projects/tget")
   -O, --ovewrite               overwrite file(s) if they already exist
   -p, --ports uints            ports to for Tor to listen on (default [])
+  -R, --reuse-instances        do not spawn new instances, assume they are already open (implies --keep-alive)
   -S, --socks-version string   socks version to use (default "socks5")
       --test-domain string     website to use while testing if Tor is up (default "https://thatsn0tmy.site")
   -T, --timeout int            max time to wait for Tor before canceling (0: no timeout)
   -t, --tor-path string        path to Tor binary (default "/usr/bin/tor")
   -k, --unsafe-tls             skip TLS certificates validation
-  -U, --useragent string       useraget to use when sending requests (default "tget/v0.1")
+  -U, --useragent string       useraget to use when sending requests (default "tget/v0.3")
   -v, --verbose                be (very) verbose
 
 ```
