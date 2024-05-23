@@ -33,22 +33,24 @@ import (
 )
 
 type tgetFlags struct {
-	socksVersion string
-	conf         string
-	ports        []uint
-	fromFile     bool
-	concurrency  int
-	instances    int
-	getTor       bool
-	torPath      string
-	logPath      string
-	outPath      string
-	host         string
-	verbose      bool
-	maxWait      int
-	ovewrite     bool
-	tryContinue  bool
-	testDomain   string
+	socksVersion   string
+	conf           string
+	ports          []uint
+	fromFile       bool
+	concurrency    int
+	instances      int
+	getTor         bool
+	torPath        string
+	logPath        string
+	outPath        string
+	host           string
+	verbose        bool
+	maxWait        int
+	ovewrite       bool
+	tryContinue    bool
+	testDomain     string
+	keepalive      bool
+	reuseinstances bool
 
 	body           string
 	method         string
@@ -87,6 +89,11 @@ var rootCmd = &cobra.Command{
 			fmt.Println("No urls or files specified!")
 			cmd.Root().Help()
 			return
+		}
+
+		//Imply keepalive if we are reusing instances
+		if flags.reuseinstances {
+			flags.keepalive = true
 		}
 
 		//Check if tor is installed (aka we have a valid tor-path)
@@ -166,7 +173,10 @@ var rootCmd = &cobra.Command{
 			if err != nil {
 				log.Fatal(err)
 			}
-			defer os.RemoveAll(dir)
+			if !flags.keepalive {
+				defer os.RemoveAll(dir)
+			}
+
 			file, err := os.Create(path.Join(dir, fmt.Sprintf("%d_%v.torrc", flags.ports[i], uuid.New().String())))
 			if err != nil {
 				log.Fatal(err)
@@ -221,20 +231,23 @@ var rootCmd = &cobra.Command{
 				defer dialCancel()
 			}
 
-			torInstance, err := tor.Start(dialCtx, &tor.StartConf{
-				TorrcFile:         file.Name(),
-				NoAutoSocksPort:   true,
-				EnableNetwork:     true,
-				RetainTempDataDir: false,
-				NoHush:            flags.verbose,
-			})
-			if err != nil {
-				log.Fatalf("failed to start Tor instance: %v\n", err)
-				continue
-			}
+			if !flags.reuseinstances { // we are spawning the instances
+				torInstance, err := tor.Start(dialCtx, &tor.StartConf{
+					TorrcFile:         file.Name(),
+					NoAutoSocksPort:   true,
+					EnableNetwork:     true,
+					RetainTempDataDir: flags.keepalive,
+					NoHush:            flags.verbose,
+				})
+				if err != nil {
+					log.Fatalf("failed to start Tor instance: %v\n", err)
+					continue
+				}
 
-			tors = append(tors, torInstance)
+				tors = append(tors, torInstance)
+			}
 			torswg.Add(1)
+
 			go func(id int, c *http.Client, progress *mpb.Bar) {
 				defer torswg.Done()
 
@@ -262,7 +275,7 @@ var rootCmd = &cobra.Command{
 		//Wait for all tor instances to be ready
 		//torswg.Wait()
 		torProgress.Wait()
-		if flags.verbose {
+		if flags.verbose && flags.keepalive {
 			log.Printf("created %d http Tor clients using %d Tor instances\n", len(clients), flags.instances)
 			log.Println("Tor instances:", tors)
 		}
@@ -360,10 +373,13 @@ var rootCmd = &cobra.Command{
 
 		if flags.verbose {
 			log.Println("downloads of", len(urls), "files took: ", (time.Since(startTime)))
-			log.Println("terminating Tor instances...")
 		}
-		for _, t := range tors {
-			defer t.Close()
+
+		if !flags.keepalive {
+			log.Println("terminating Tor instances...")
+			for _, t := range tors {
+				defer t.Close()
+			}
 		}
 	},
 }
@@ -398,6 +414,8 @@ func init() {
 	rootCmd.Flags().BoolVarP(&flags.ovewrite, "ovewrite", "O", false, "overwrite file(s) if they already exist")
 	rootCmd.Flags().BoolVar(&flags.tryContinue, "continue", false, "attempt to continue a previously interrupted download")
 	rootCmd.Flags().IntVarP(&flags.maxWait, "timeout", "T", 0, "max time to wait for Tor before canceling (0: no timeout)")
+	rootCmd.Flags().BoolVar(&flags.keepalive, "keep-alive", false, "do not close Tor instances when done")
+	rootCmd.Flags().BoolVarP(&flags.reuseinstances, "reuse-instances", "R", false, "do not spawn new instances, assume they are already open (implies --keep-alive)")
 
 	// Headers, cookies, ssl, etc
 	rootCmd.Flags().BoolVarP(&flags.followRedirect, "follow-redirect", "f", false, "follow HTTP redirects")
