@@ -50,7 +50,7 @@ Flags:
       --concurrency int        concurrency level (default 10)
   -c, --conf string            .torrc template file to use
       --continue               attempt to continue a previously interrupted download
-  -C, --cookies string         cookie(s) to include in all requests
+  -b, --cookies string         cookie(s) to include in all requests
   -d, --data string            body of request to send
   -f, --follow-redirect        follow HTTP redirects
   -F, --from-file              download from files instead of urls

@@ -416,7 +416,7 @@ func init() {
 	rootCmd.Flags().BoolVarP(&flags.verbose, "verbose", "v", false, "be (very) verbose")
 	rootCmd.Flags().BoolVarP(&flags.ovewrite, "ovewrite", "O", false, "overwrite file(s) if they already exist")
 	rootCmd.Flags().BoolVar(&flags.tryContinue, "continue", false, "attempt to continue a previously interrupted download")
-	rootCmd.Flags().IntVarP(&flags.maxWait, "timeout", "T", 0, "max time to wait for Tor before canceling (0: no timeout)")
+	rootCmd.Flags().IntVar(&flags.maxWait, "timeout", 0, "max time to wait for Tor before canceling (0: no timeout)")
 	rootCmd.Flags().BoolVar(&flags.keepalive, "keep-alive", false, "do not close Tor instances when done")
 	rootCmd.Flags().BoolVarP(&flags.reuseinstances, "reuse-instances", "R", false, "do not spawn new instances, assume they are already open (implies --keep-alive)")
 
@@ -424,7 +424,7 @@ func init() {
 	rootCmd.Flags().BoolVarP(&flags.followRedirect, "follow-redirect", "f", false, "follow HTTP redirects")
 	rootCmd.Flags().BoolVarP(&flags.unsafeTLS, "unsafe-tls", "k", false, "skip TLS certificates validation")
 	rootCmd.Flags().StringSliceVarP(&flags.headers, "header", "H", []string{}, "header(s) to include in all requests")
-	rootCmd.Flags().StringVarP(&flags.cookies, "cookies", "C", "", "cookie(s) to include in all requests")
+	rootCmd.Flags().StringVarP(&flags.cookies, "cookies", "b", "", "cookie(s) to include in all requests")
 	rootCmd.Flags().StringVarP(&flags.body, "data", "d", "", "body of request to send")
 	rootCmd.Flags().StringVarP(&flags.useragent, "useragent", "U", fmt.Sprintf("tget/%v", tget.Version), "useraget to use when sending requests")
 
