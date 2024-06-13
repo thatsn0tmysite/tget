@@ -20,7 +20,7 @@ var TorrcTemplate string
 type TorGet struct {
 }
 
-var Version = "v0.3"
+var Version = "v0.3a"
 
 func PrepareRequest(req *http.Request, headers []string, cookies, useragent, body string) {
 	for _, h := range headers {
