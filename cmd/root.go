@@ -221,6 +221,7 @@ var rootCmd = &cobra.Command{
 				TLSClientConfig: &tls.Config{
 					InsecureSkipVerify: flags.unsafeTLS,
 				},
+				DisableCompression: true,
 			}
 			clients = append(clients, &http.Client{Transport: tbTransport})
 

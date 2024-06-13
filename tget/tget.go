@@ -88,7 +88,6 @@ func DownloadUrl(c *http.Client, req *http.Request, outPath string, followRedir,
 			defer resp.Body.Close()
 		} else {
 			//log.Println("aborting")
-
 			bar.Abort(false)
 			return
 		}
@@ -104,7 +103,8 @@ func DownloadUrl(c *http.Client, req *http.Request, outPath string, followRedir,
 
 	totalBytes, err := strconv.Atoi(resp.Header.Get("content-length"))
 	if err != nil {
-		totalBytes = 0
+		log.Println(req.URL, "couldn't read content-lenght")
+		totalBytes = -1
 	}
 
 	//log.Printf("%v size is %d\n", req.URL, totalBytes)
@@ -117,14 +117,12 @@ func DownloadUrl(c *http.Client, req *http.Request, outPath string, followRedir,
 
 	_, err = io.Copy(pw, pr)
 	if err != nil && err != io.EOF {
-		_, err := io.ReadAll(pr)
+		//_, err := io.ReadAll(pr)
 		//log.Println("body:", body)
-		//log.Println("err:", err)
 		log.Println("copy error:", err)
 		bar.Abort(false)
 	}
 
-	//log.Println("written", w, "to", out.Name())
 	bar.SetTotal(-1, true) // set as complete
 	//log.Println(out.Name(), "done")
 }
