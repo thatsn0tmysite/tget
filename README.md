@@ -14,7 +14,7 @@ Not the most novel (nor elegant) technique but... meh.
 
 This tool makes use of the handy [bine](https://github.com/cretz/bine) and the fancy [mpb](https://github.com/vbauerster/mpb) libraries!
 
-If you find this **obnoxious thing** useful leave me a star, fork or contribute, also consider [donating to Tor](https://donate.torproject.org/)!
+If you find this **obnoxious thing** useful leave me a star, fork and contribute, also consider [donating to Tor](https://donate.torproject.org/)!
 
 ## Fancy gif
 ![example usage](.images/demo.cast.svg)
