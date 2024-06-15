@@ -50,6 +50,7 @@ type tgetFlags struct {
 	tryContinue    bool
 	testDomain     string
 	keepalive      bool
+	prepare        bool
 	reuseinstances bool
 
 	body           string
@@ -280,6 +281,9 @@ var rootCmd = &cobra.Command{
 			log.Printf("created %d http Tor clients using %d Tor instances\n", len(clients), flags.instances)
 			log.Println("Tor instances:", tors)
 		}
+		if flags.prepare {
+			return
+		}
 
 		//Get list of URLs
 		isEmptyRegex, _ := regexp.Compile(`^\s*$`)
@@ -419,6 +423,8 @@ func init() {
 	rootCmd.Flags().BoolVar(&flags.tryContinue, "continue", false, "attempt to continue a previously interrupted download")
 	rootCmd.Flags().IntVar(&flags.maxWait, "timeout", 0, "max time to wait for Tor before canceling (0: no timeout)")
 	rootCmd.Flags().BoolVar(&flags.keepalive, "keep-alive", false, "do not close Tor instances when done")
+	rootCmd.Flags().BoolVar(&flags.prepare, "prepare", false, "only start the requested Tor instances and quit (implies --keep-alive)")
+
 	rootCmd.Flags().BoolVarP(&flags.reuseinstances, "reuse-instances", "R", false, "do not spawn new instances, assume they are already open (implies --keep-alive)")
 
 	// Headers, cookies, ssl, etc
