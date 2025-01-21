@@ -52,6 +52,7 @@ type tgetFlags struct {
 	keepalive      bool
 	prepare        bool
 	reuseinstances bool
+	partial        bool
 
 	body           string
 	method         string
@@ -309,10 +310,18 @@ var rootCmd = &cobra.Command{
 			}
 		}
 
-		chunks := tget.ChunkBy(urls, flags.instances)
+		var partialDownloads [][][]int64
+		var fullDownloads [][]string
+		if flags.partial {
+			partialDownloads, fullDownloads = tget.SplitAndDistributeDownloads(clients, urls, flags.instances, flags.headers, flags.cookies, flags.useragent, flags.body, flags.followRedirect)
+		} else {
+			fullDownloads = tget.ChunkBy(urls, flags.instances)
+		}
+
 		if flags.verbose {
 			log.Printf("total URLs: %d\n", len(urls))
-			log.Printf("chunks: %v\n", chunks)
+			log.Printf("partialDownloads: %v\n", partialDownloads)
+			log.Printf("fullDownloads: %v\n", fullDownloads)
 		}
 
 		var wg sync.WaitGroup
@@ -323,17 +332,91 @@ var rootCmd = &cobra.Command{
 
 		startTime := time.Now()
 
+		splitMap := make(map[string][]string)
+
 		//Feed chunks to workers
 		for i := range flags.instances {
 			p, _ := ants.NewPool(flags.concurrency) // each "instance"/chunk gets a pool
 
-			chunk := chunks[i]
-			for _, url := range chunk {
+			var partialDownloadsChunk [][]int64
+			var fullDownloadsChunk []string
+			if len(partialDownloads) > 0 && i < len(partialDownloads) {
+				partialDownloadsChunk = partialDownloads[i]
+			}
+
+			if len(fullDownloads) > 0 && i < len(fullDownloads) {
+				fullDownloadsChunk = fullDownloads[i]
+			}
+
+			if flags.verbose {
+				log.Printf("instance %d will download %v URLs\n", i, len(fullDownloadsChunk))
+			}
+
+			for j, rng := range partialDownloadsChunk {
 				wg.Add(1)
 
-				if flags.verbose {
-					log.Printf("instance %d will download %v URLs\n", i, len(chunks[i]))
+				req, _ := http.NewRequest(flags.method, urls[j], nil)
+				tget.PrepareRequest(req, flags.headers, flags.cookies, flags.useragent, flags.body)
+
+				baseFileName := path.Base(req.URL.Path)
+				if baseFileName == "." || baseFileName == "/" {
+					baseFileName = fmt.Sprintf("%v_index.html", req.URL.Host)
+					if flags.verbose {
+						log.Printf("instance %d will download %v (part%d) (%v)\n", i, baseFileName, i, req)
+					}
 				}
+				originalFileName := baseFileName
+				baseFileName = fmt.Sprintf("%s.part%d", baseFileName, i)
+				outFilePath := path.Join(flags.outPath, baseFileName)
+				err = os.MkdirAll(flags.outPath, os.ModePerm)
+				if err != nil {
+					log.Fatalf("failed to create directory: %v\n", err)
+					return
+				}
+
+				if !flags.tryContinue && !flags.overwrite {
+					outFilePath = tget.GetFilename(outFilePath) // if path is / or "" we should save as index.html.<attempt>
+				}
+				splitMap[originalFileName] = append(splitMap[originalFileName], outFilePath)
+
+				//TODO: rework to make it look better maybe: filenam [bar] [ETA] [status/percentage]?
+				bar := bars.AddBar(
+					0,
+					mpb.PrependDecorators(
+						decor.Name(fmt.Sprintf("[T%d] %v", i, baseFileName)),
+					),
+					mpb.AppendDecorators(
+						//decor.Counters(decor.SizeB1024(0), "% .1f / % .1f"),
+						decor.EwmaSpeed(decor.SizeB1024(0), " % .2f ", 60),
+						decor.Name("|"),
+						decor.Total(decor.SizeB1024(0), " %d "),
+						decor.Name("|"),
+						decor.Percentage(decor.WCSyncSpace),
+						decor.Name("|"),
+						decor.OnAbort(
+							decor.AverageETA(decor.ET_STYLE_GO, decor.WCSyncWidth), "aborted",
+						),
+					),
+				)
+
+				p.Submit(func() {
+					defer wg.Done()
+					tget.PartialDownloadUrl(
+						clients[i],
+						req,
+						outFilePath,
+						rng[0],
+						rng[1],
+						flags.followRedirect,
+						flags.tryContinue,
+						flags.overwrite,
+						bar,
+					)
+				})
+			}
+
+			for _, url := range fullDownloadsChunk {
+				wg.Add(1)
 
 				req, _ := http.NewRequest(flags.method, url, nil)
 				tget.PrepareRequest(req, flags.headers, flags.cookies, flags.useragent, flags.body)
@@ -386,6 +469,19 @@ var rootCmd = &cobra.Command{
 		}
 		bars.Wait()
 
+		if flags.partial && len(splitMap) > 0 {
+			for outFilePath, splitFiles := range splitMap {
+				err := tget.MergeChunkFiles(splitFiles, outFilePath)
+				if err != nil {
+					fmt.Printf("merging splits for %s: %v\n", outFilePath, err)
+				} else {
+					for _, f := range splitFiles {
+					    os.Remove(f)
+					}
+				}
+			}
+		}
+
 		if flags.verbose {
 			log.Println("downloads of", len(urls), "files took: ", (time.Since(startTime)))
 		}
@@ -433,6 +529,8 @@ func init() {
 	rootCmd.Flags().BoolVar(&flags.prepare, "prepare", false, "only start the requested Tor instances and quit (implies --keep-alive)")
 
 	rootCmd.Flags().BoolVarP(&flags.reuseinstances, "reuse-instances", "R", false, "do not spawn new instances, assume they are already open (implies --keep-alive)")
+
+	rootCmd.Flags().BoolVar(&flags.partial, "partial", false, "attempt to split and distribute each file part in Tor instances")
 
 	// Headers, cookies, ssl, etc
 	rootCmd.Flags().BoolVarP(&flags.followRedirect, "follow-redirect", "f", false, "follow HTTP redirects")
